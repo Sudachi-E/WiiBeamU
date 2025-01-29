@@ -20,7 +20,7 @@ WiiBeamU is a lightweight and user-friendly application that allows you to send 
 
 ### Installation
 
-1. Download the WiiBeamU application from [GitHub Releases](#).
+1. Download the WiiBeamU application from [GitHub Releases](https://github.com/Sudachi-E/WiiBeamU/releases/).
 2. Install the application on your smartphone
     - Download and install the `.apk` file.
 3. Ensure your Wii/Wii U console is ready to receive the files
