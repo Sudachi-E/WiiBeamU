@@ -1,6 +1,6 @@
 # WiiBeamU
 
-WiiBeamU is a lightweight and user-friendly application that allows you to send `.rpx` files directly to your Wii or Wii U wirelessly using your smartphone. Inspired by tools like SendElf, WiiBeamU makes sending `.rpx` files and other executables like `.wuhb` seamless and efficient without the need of a computer.
+WiiBeamU is a lightweight and user-friendly application that allows you to send `.rpx` files directly to your Wii or Wii U wirelessly using your smartphone, WiiBeamU makes sending `.rpx` files and other executables like `.wuhb` seamless and efficient without the need of a computer.
 
 ---
 
