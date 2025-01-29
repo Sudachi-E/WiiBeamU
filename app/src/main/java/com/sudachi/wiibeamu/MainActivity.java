@@ -2,53 +2,61 @@ package com.sudachi.wiibeamu;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.AsyncTask;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import java.io.BufferedInputStream;
+import android.widget.PopupMenu;
+
+import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetAddress;
 import java.net.Socket;
-import java.util.zip.DeflaterOutputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.zip.Deflater;
 
 public class MainActivity extends AppCompatActivity {
-    private static final int PORT = 4299;
-    private TextView fileNameText;
-    private EditText wiiIpInput;
-    private Button sendButton;
-    private Button browseButton;
-    private Uri selectedFileUri;
-    private SharedPreferences prefs;
-
-    private final ActivityResultLauncher<Intent> filePickerLauncher = registerForActivityResult(
+    private static final int WII_PORT = 4299;
+    private static final int BUFFER_SIZE = 8192;
+    private static final String PREFS_NAME = "BeamUPrefs";
+    private static final String LAST_IP_KEY = "lastUsedIP";
+    private static final String THEME_PREF_KEY = "theme_mode";
+    
+    private TextView statusText;
+    private EditText ipAddressField;
+    private Button selectFileButton;
+    private Button transmitButton;
+    private Uri selectedFile;
+    private SharedPreferences preferences;
+    private ProgressDialog progressDialog;
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private ImageButton themeToggle;
+    
+    private final ActivityResultLauncher<Intent> filePicker = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
                 if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
-                    selectedFileUri = result.getData().getData();
-                    String fileName = selectedFileUri.getLastPathSegment();
-                    fileNameText.setText(fileName);
-                    sendButton.setEnabled(true);
+                    handleFileSelection(result.getData().getData());
                 }
             }
     );
@@ -56,142 +64,220 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        applyTheme();
         setContentView(R.layout.activity_main);
-
-        prefs = getSharedPreferences("BeamU", MODE_PRIVATE);
-
-        fileNameText = findViewById(R.id.fileNameText);
-        wiiIpInput = findViewById(R.id.wiiIpInput);
-        sendButton = findViewById(R.id.sendButton);
-        browseButton = findViewById(R.id.browseButton);
-
-        String lastIp = prefs.getString("last_ip", "");
-        wiiIpInput.setText(lastIp);
-
-        browseButton.setOnClickListener(v -> openFilePicker());
-        sendButton.setOnClickListener(v -> sendFileToWii());
-
-        checkPermissions();
+        initializeViews();
+        setupPreferences();
+        verifyPermissions();
+        setupClickListeners();
     }
 
-    private void checkPermissions() {
+    private void initializeViews() {
+        statusText = findViewById(R.id.fileNameText);
+        ipAddressField = findViewById(R.id.wiiIpInput);
+        selectFileButton = findViewById(R.id.browseButton);
+        transmitButton = findViewById(R.id.sendButton);
+        transmitButton.setEnabled(false);
+        
+        progressDialog = new ProgressDialog(this);
+        progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        progressDialog.setCancelable(false);
+        themeToggle = findViewById(R.id.themeToggle);
+    }
+
+    private void setupPreferences() {
+        String savedIP = preferences.getString(LAST_IP_KEY, "");
+        ipAddressField.setText(savedIP);
+    }
+
+    private void verifyPermissions() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
-                    1);
+                    new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 100);
         }
     }
 
-    private void openFilePicker() {
-        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-        intent.setType("*/*");
-        filePickerLauncher.launch(intent);
+    private void setupClickListeners() {
+        selectFileButton.setOnClickListener(v -> launchFilePicker());
+        transmitButton.setOnClickListener(v -> initiateFileTransfer());
+        themeToggle.setOnClickListener(v -> showThemeMenu());
     }
 
-    private void sendFileToWii() {
-        String ip = wiiIpInput.getText().toString();
-        if (ip.isEmpty()) {
-            Toast.makeText(this, "Please enter Wii IP address", Toast.LENGTH_SHORT).show();
+    private void launchFilePicker() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("*/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        filePicker.launch(intent);
+    }
+
+    private void handleFileSelection(Uri uri) {
+        selectedFile = uri;
+        String fileName = getFileName(uri);
+        statusText.setText(fileName);
+        transmitButton.setEnabled(true);
+    }
+
+    private String getFileName(Uri uri) {
+        String result = uri.getLastPathSegment();
+        int cut = result.lastIndexOf('/');
+        if (cut != -1) {
+            result = result.substring(cut + 1);
+        }
+        return result;
+    }
+
+    private void initiateFileTransfer() {
+        String ipAddress = ipAddressField.getText().toString().trim();
+        if (ipAddress.isEmpty()) {
+            showMessage("Please enter Wii IP address");
             return;
         }
 
-        prefs.edit().putString("last_ip", ip).apply();
-
-        new SendFileTask().execute(ip);
+        preferences.edit().putString(LAST_IP_KEY, ipAddress).apply();
+        startFileTransfer(ipAddress);
     }
 
-    private class SendFileTask extends AsyncTask<String, String, Boolean> {
-        @Override
-        protected Boolean doInBackground(String... params) {
-            String host = params[0];
+    private void startFileTransfer(String ipAddress) {
+        progressDialog.setMessage("Preparing transfer...");
+        progressDialog.setProgress(0);
+        progressDialog.show();
+
+        executorService.execute(() -> {
             try {
-                publishProgress("Connecting to Wii...");
-                Socket socket = new Socket(host, PORT);
-
-                publishProgress("Compressing data...");
-                File compressedFile = compressFile(selectedFileUri);
-
-                publishProgress("Sending file...");
-                sendFileToSocket(socket, compressedFile);
-
-                compressedFile.delete();
-                return true;
+                byte[] compressedData = compressFileData();
+                sendToWii(ipAddress, compressedData);
+                showTransferComplete();
             } catch (Exception e) {
-                e.printStackTrace();
-                publishProgress("Error: " + e.getMessage());
-                return false;
+                handleTransferError(e);
             }
+        });
+    }
+
+    private byte[] compressFileData() throws IOException {
+        ByteArrayOutputStream compressedStream = new ByteArrayOutputStream();
+        Deflater deflater = new Deflater();
+        byte[] buffer = new byte[BUFFER_SIZE];
+        
+        try (InputStream inputStream = getContentResolver().openInputStream(selectedFile)) {
+            int totalBytes = inputStream.available();
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                deflater.setInput(buffer, 0, bytesRead);
+                
+                byte[] compressedBuffer = new byte[BUFFER_SIZE];
+                while (!deflater.needsInput()) {
+                    int compressedBytes = deflater.deflate(compressedBuffer);
+                    compressedStream.write(compressedBuffer, 0, compressedBytes);
+                }
+                
+                updateProgress("Compressing...", (int) (compressedStream.size() * 100L / totalBytes));
+            }
+            
+            deflater.finish();
+            while (!deflater.finished()) {
+                int count = deflater.deflate(buffer);
+                compressedStream.write(buffer, 0, count);
+            }
+    }
+
+        return compressedStream.toByteArray();
+    }
+
+    private void sendToWii(String ipAddress, byte[] compressedData) throws IOException {
+        try (Socket socket = new Socket(ipAddress, WII_PORT);
+             DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
+        
+            String fileName = getFileName(selectedFile);
+            writeHeader(output, fileName, compressedData.length);
+
+            int chunkSize = BUFFER_SIZE;
+            int totalChunks = (compressedData.length + chunkSize - 1) / chunkSize;
+        
+        for (int i = 0; i < totalChunks; i++) {
+                int start = i * chunkSize;
+                int length = Math.min(chunkSize, compressedData.length - start);
+                output.write(compressedData, start, length);
+            output.flush();
+            
+            updateProgress("Sending file...", (i + 1) * 100 / totalChunks);
         }
 
-        @Override
-        protected void onProgressUpdate(String... values) {
-            Toast.makeText(MainActivity.this, values[0], Toast.LENGTH_SHORT).show();
-        }
-
-        @Override
-        protected void onPostExecute(Boolean success) {
-            if (success) {
-                Toast.makeText(MainActivity.this, "File sent successfully!", Toast.LENGTH_LONG).show();
-            }
+            output.writeBytes(fileName + '\0');
+        output.flush();
         }
     }
 
-    private File compressFile(Uri fileUri) throws Exception {
-        File compressedFile = new File(getCacheDir(), "compressed.BeamU.gz");
-        InputStream in = getContentResolver().openInputStream(fileUri);
-        OutputStream out = new DeflaterOutputStream(new FileOutputStream(compressedFile));
-
-        byte[] buffer = new byte[1024];
-        int len;
-        while ((len = in.read(buffer)) > 0) {
-            out.write(buffer, 0, len);
-        }
-
-        in.close();
-        out.close();
-        return compressedFile;
+    private void writeHeader(DataOutputStream output, String fileName, int compressedLength) throws IOException {
+        output.writeBytes("1027");  // magic number
+        output.writeByte(0);  // max version
+        output.writeByte(5);  // min version
+        output.writeShort(fileName.length() + 1);
+        output.writeInt(compressedLength);
+        
+        try (InputStream inputStream = getContentResolver().openInputStream(selectedFile)) {
+            output.writeInt(inputStream.available());  // original size
+            }
     }
 
-    private void sendFileToSocket(Socket socket, File compressedFile) throws Exception {
-        OutputStream os = socket.getOutputStream();
-        DataOutputStream dos = new DataOutputStream(os);
+    private void updateProgress(String message, int progress) {
+        mainHandler.post(() -> {
+            progressDialog.setMessage(message);
+            progressDialog.setProgress(progress);
+        });
+    }
 
-        String fileName = selectedFileUri.getLastPathSegment();
-        short argsLength = (short) (fileName.length() + 1);
-        int compressedLength = (int) compressedFile.length();
+    private void showTransferComplete() {
+        mainHandler.post(() -> {
+            progressDialog.dismiss();
+            showMessage("Transfer completed successfully!");
+        });
+    }
 
-        // Get original file size
-        InputStream originalFile = getContentResolver().openInputStream(selectedFileUri);
-        int originalLength = originalFile.available();
-        originalFile.close();
+    private void handleTransferError(Exception e) {
+        mainHandler.post(() -> {
+            progressDialog.dismiss();
+            showMessage("Transfer failed: " + e.getMessage());
+        });
+    }
 
-        // Send header
-        dos.writeBytes("HAXXp");
-        dos.writeByte(0); // max version
-        dos.writeByte(5); // min version
-        dos.writeShort(argsLength);
-        dos.writeInt(compressedLength);
-        dos.writeInt(originalLength);
+    private void showMessage(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
 
-        // Send file data
-        InputStream is = new FileInputStream(compressedFile);
-        BufferedInputStream bis = new BufferedInputStream(is);
-        byte[] buffer = new byte[128 * 1024];
-        int numRead;
+    private void showThemeMenu() {
+        PopupMenu popup = new PopupMenu(this, themeToggle);
+        popup.getMenuInflater().inflate(R.menu.theme_menu, popup.getMenu());
 
-        while ((numRead = bis.read(buffer)) > 0) {
-            dos.write(buffer, 0, numRead);
-            dos.flush();
-        }
+        popup.setOnMenuItemClickListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.menu_light_mode) {
+                setThemeMode(AppCompatDelegate.MODE_NIGHT_NO);
+                return true;
+            } else if (itemId == R.id.menu_dark_mode) {
+                setThemeMode(AppCompatDelegate.MODE_NIGHT_YES);
+                return true;
+            }
+            return false;
+        });
 
-        // Send filename
-        dos.writeBytes(fileName + "\0");
-        dos.flush();
+        popup.show();
+    }
 
-        bis.close();
-        is.close();
-        dos.close();
-        os.close();
+    private void setThemeMode(int mode) {
+        preferences.edit().putInt(THEME_PREF_KEY, mode).apply();
+            AppCompatDelegate.setDefaultNightMode(mode);
+    }
+
+    private void applyTheme() {
+        int savedTheme = preferences.getInt(THEME_PREF_KEY, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+        AppCompatDelegate.setDefaultNightMode(savedTheme);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        executorService.shutdown();
     }
 }
