@@ -52,6 +52,7 @@ WiiBeamU is licensed under the [GPL-3.0 license](LICENSE). Feel free to use, mod
 ## Acknowledgments
 
 - Credits to [vgmoose](https://github.com/vgmoose) for [Wiiload](https://github.com/vgmoose/Wiiload-for-Android) that was inspiration for this project.
+  
 - Special thanks to the Wii and Wii U homebrew community for their continued support and innovation.
 
 ---
