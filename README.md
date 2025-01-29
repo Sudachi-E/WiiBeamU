@@ -24,7 +24,7 @@ WiiBeamU is a lightweight and user-friendly application that allows you to send 
 2. Install the application on your smartphone
     - Download and install the `.apk` file.
 3. Ensure your Wii/Wii U console is ready to receive the files
-    - Aroma (Wii U) Make sure you have the ftpiiu plugin.
+    - Aroma (Wii U) Make sure you have the Wiiload plugin.
     - You could also use the homebrew channel on the Wii and Wii U.
 
 ---
