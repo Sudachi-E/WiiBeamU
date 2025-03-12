@@ -1,6 +1,6 @@
-# WiiBeamU
+# Wiiload Android
 
-WiiBeamU is a lightweight and user-friendly application that allows you to send `.rpx` files directly to your Wii or Wii U wirelessly using your smartphone, WiiBeamU makes sending `.rpx` files and other executables like `.wuhb` seamless and efficient without the need of a computer.
+Wiiload Android is a lightweight and user-friendly application that allows you to send `.rpx` files directly to your Wii or Wii U wirelessly using your smartphone, Wiiload Android makes sending `.rpx` files and other executables like `.wuhb` seamless and efficient without the need of a computer.
 
 ---
 
@@ -20,7 +20,7 @@ WiiBeamU is a lightweight and user-friendly application that allows you to send 
 
 ### Installation
 
-1. Download the WiiBeamU application from [GitHub Releases](https://github.com/Sudachi-E/WiiBeamU/releases/).
+1. Download the Wiiload Android application from [GitHub Releases](https://github.com/Sudachi-E/Wiiload Android/releases/).
 2. Install the application on your smartphone
     - Download and install the `.apk` file.
 3. Ensure your Wii/Wii U console is ready to receive the files
@@ -31,7 +31,7 @@ WiiBeamU is a lightweight and user-friendly application that allows you to send 
 
 ## Usage
 
-1. Launch WiiBeamU on your smartphone.
+1. Launch Wiiload Android on your smartphone.
 2. Input your Wii's IP Address in the field.
 3. Browse and select the `.rpx` file you want to send.
 4. Tap "Send" to transfer the file wirelessly to your console.
@@ -45,7 +45,7 @@ WiiBeamU is a lightweight and user-friendly application that allows you to send 
 
 ## License
 
-WiiBeamU is licensed under the [GPL-3.0 license](LICENSE). Feel free to use, modify, and distribute the software as per the terms of the license.
+Wiiload Android is licensed under the [GPL-3.0 license](LICENSE). Feel free to use, modify, and distribute the software as per the terms of the license.
 
 ---
 
