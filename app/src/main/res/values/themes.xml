@@ -1,9 +1,9 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
-    <style name="Base.Theme.WiiBeamU" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Base.Theme.WiiloadAndroid" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your light theme here. -->
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
     </style>
 
-    <style name="Theme.WiiBeamU" parent="Base.Theme.WiiBeamU" />
+    <style name="Theme.WiiloadAndroid" parent="Base.Theme.WiiloadAndroid" />
 </resources>

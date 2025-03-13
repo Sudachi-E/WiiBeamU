@@ -19,5 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "WiiBeamU"
+rootProject.name = "WiiloadAndroid"
 include(":app")
+ 
